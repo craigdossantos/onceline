@@ -1,7 +1,16 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+// Validate environment variables at runtime
+if (!supabaseUrl) {
+  throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL environment variable')
+}
+
+if (!supabaseAnonKey) {
+  throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable')
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
@@ -39,4 +48,26 @@ export interface ChatMessage {
   content: string
   created_event_ids?: string[]
   created_at: string
+}
+
+// Type guard helpers
+export function isTimelineEvent(obj: unknown): obj is TimelineEvent {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    'id' in obj &&
+    'timeline_id' in obj &&
+    'title' in obj
+  )
+}
+
+export function isChatMessage(obj: unknown): obj is ChatMessage {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    'id' in obj &&
+    'timeline_id' in obj &&
+    'role' in obj &&
+    'content' in obj
+  )
 }

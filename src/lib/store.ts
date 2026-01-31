@@ -7,6 +7,7 @@ interface AppState {
   messages: ChatMessage[]
   isLoading: boolean
   isSending: boolean
+  error: string | null
   
   // Timeline actions
   initTimeline: () => Promise<void>
@@ -18,6 +19,9 @@ interface AppState {
   // Chat actions
   loadMessages: () => Promise<void>
   sendMessage: (content: string) => Promise<void>
+  
+  // Error handling
+  clearError: () => void
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -26,34 +30,54 @@ export const useStore = create<AppState>((set, get) => ({
   messages: [],
   isLoading: true,
   isSending: false,
+  error: null,
+  
+  clearError: () => set({ error: null }),
   
   initTimeline: async () => {
-    set({ isLoading: true })
+    set({ isLoading: true, error: null })
     
-    // Check for existing timeline (MVP: just grab the first one)
-    const { data: timelines } = await supabase
-      .from('timelines')
-      .select('*')
-      .limit(1)
-    
-    let timeline = timelines?.[0]
-    
-    // Create one if none exists
-    if (!timeline) {
-      const { data: newTimeline } = await supabase
+    try {
+      // Check for existing timeline (MVP: just grab the first one)
+      const { data: timelines, error: fetchError } = await supabase
         .from('timelines')
-        .insert({ name: 'My Life' })
-        .select()
-        .single()
-      timeline = newTimeline
-    }
-    
-    set({ timeline, isLoading: false })
-    
-    // Load events and messages
-    if (timeline) {
-      get().loadEvents()
-      get().loadMessages()
+        .select('*')
+        .limit(1)
+      
+      if (fetchError) {
+        throw new Error(`Failed to fetch timelines: ${fetchError.message}`)
+      }
+      
+      let timeline = timelines?.[0]
+      
+      // Create one if none exists
+      if (!timeline) {
+        const { data: newTimeline, error: createError } = await supabase
+          .from('timelines')
+          .insert({ name: 'My Life' })
+          .select()
+          .single()
+        
+        if (createError) {
+          throw new Error(`Failed to create timeline: ${createError.message}`)
+        }
+        
+        timeline = newTimeline
+      }
+      
+      set({ timeline, isLoading: false })
+      
+      // Load events and messages in parallel
+      if (timeline) {
+        await Promise.all([
+          get().loadEvents(),
+          get().loadMessages()
+        ])
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to initialize timeline'
+      console.error('initTimeline error:', error)
+      set({ error: errorMessage, isLoading: false })
     }
   },
   
@@ -61,31 +85,51 @@ export const useStore = create<AppState>((set, get) => ({
     const { timeline } = get()
     if (!timeline) return
     
-    const { data: events } = await supabase
-      .from('events')
-      .select('*')
-      .eq('timeline_id', timeline.id)
-      .order('start_date', { ascending: true, nullsFirst: false })
-    
-    set({ events: events || [] })
+    try {
+      const { data: events, error } = await supabase
+        .from('events')
+        .select('*')
+        .eq('timeline_id', timeline.id)
+        .order('start_date', { ascending: true, nullsFirst: false })
+      
+      if (error) {
+        throw new Error(`Failed to load events: ${error.message}`)
+      }
+      
+      set({ events: events || [] })
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load events'
+      console.error('loadEvents error:', error)
+      set({ error: errorMessage })
+    }
   },
   
   addEvent: async (event) => {
     const { timeline, events } = get()
     if (!timeline) return
     
-    const { data: newEvent } = await supabase
-      .from('events')
-      .insert({ ...event, timeline_id: timeline.id })
-      .select()
-      .single()
-    
-    if (newEvent) {
-      set({ events: [...events, newEvent].sort((a, b) => {
-        if (!a.start_date) return 1
-        if (!b.start_date) return -1
-        return new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
-      })})
+    try {
+      const { data: newEvent, error } = await supabase
+        .from('events')
+        .insert({ ...event, timeline_id: timeline.id })
+        .select()
+        .single()
+      
+      if (error) {
+        throw new Error(`Failed to add event: ${error.message}`)
+      }
+      
+      if (newEvent) {
+        set({ events: [...events, newEvent].sort((a, b) => {
+          if (!a.start_date) return 1
+          if (!b.start_date) return -1
+          return new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+        })})
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add event'
+      console.error('addEvent error:', error)
+      set({ error: errorMessage })
     }
   },
   
@@ -93,33 +137,51 @@ export const useStore = create<AppState>((set, get) => ({
     const { timeline } = get()
     if (!timeline) return
     
-    const { data: messages } = await supabase
-      .from('chat_messages')
-      .select('*')
-      .eq('timeline_id', timeline.id)
-      .order('created_at', { ascending: true })
-    
-    set({ messages: messages || [] })
+    try {
+      const { data: messages, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('timeline_id', timeline.id)
+        .order('created_at', { ascending: true })
+      
+      if (error) {
+        throw new Error(`Failed to load messages: ${error.message}`)
+      }
+      
+      set({ messages: messages || [] })
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load messages'
+      console.error('loadMessages error:', error)
+      set({ error: errorMessage })
+    }
   },
   
   sendMessage: async (content: string) => {
     const { timeline, messages } = get()
     if (!timeline) return
     
-    set({ isSending: true })
+    // Validate input
+    const trimmedContent = content.trim()
+    if (!trimmedContent) return
     
-    // Save user message
-    const { data: userMessage } = await supabase
-      .from('chat_messages')
-      .insert({ timeline_id: timeline.id, role: 'user', content })
-      .select()
-      .single()
-    
-    if (userMessage) {
-      set({ messages: [...messages, userMessage] })
-    }
+    set({ isSending: true, error: null })
     
     try {
+      // Save user message
+      const { data: userMessage, error: userError } = await supabase
+        .from('chat_messages')
+        .insert({ timeline_id: timeline.id, role: 'user', content: trimmedContent })
+        .select()
+        .single()
+      
+      if (userError) {
+        throw new Error(`Failed to save message: ${userError.message}`)
+      }
+      
+      if (userMessage) {
+        set({ messages: [...messages, userMessage] })
+      }
+      
       // Get AI response
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -131,10 +193,19 @@ export const useStore = create<AppState>((set, get) => ({
         })
       })
       
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`)
+      }
+      
       const data = await response.json()
       
+      // Check for API error response
+      if (data.error) {
+        throw new Error(data.error)
+      }
+      
       // Save assistant message
-      const { data: assistantMessage } = await supabase
+      const { data: assistantMessage, error: assistantError } = await supabase
         .from('chat_messages')
         .insert({
           timeline_id: timeline.id,
@@ -145,20 +216,26 @@ export const useStore = create<AppState>((set, get) => ({
         .select()
         .single()
       
+      if (assistantError) {
+        throw new Error(`Failed to save assistant message: ${assistantError.message}`)
+      }
+      
       if (assistantMessage) {
         set({ messages: [...get().messages, assistantMessage] })
       }
       
       // Add any new events
-      if (data.events && data.events.length > 0) {
+      if (data.events && Array.isArray(data.events) && data.events.length > 0) {
         for (const event of data.events) {
           await get().addEvent(event)
         }
       }
     } catch (error) {
-      console.error('Chat error:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send message'
+      console.error('sendMessage error:', error)
+      set({ error: errorMessage })
+    } finally {
+      set({ isSending: false })
     }
-    
-    set({ isSending: false })
   }
 }))
