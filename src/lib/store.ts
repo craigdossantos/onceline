@@ -93,45 +93,60 @@ export const useStore = create<AppState>()((set, get) => ({
   initTimeline: async () => {
     set({ isLoading: true, isAnonymous: false })
     
-    // Get current user's session
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      set({ isLoading: false })
-      return
-    }
-    
-    // Check for existing timeline for this user
-    const { data: timelines } = await supabase
-      .from('timelines')
-      .select('*')
-      .eq('user_id', user.id)
-      .limit(1)
-    
-    let timeline = timelines?.[0]
-    
-    // Create one if none exists
-    if (!timeline) {
-      const { data: newTimeline } = await supabase
-        .from('timelines')
-        .insert({ 
-          name: 'My Life',
-          user_id: user.id 
-        })
-        .select()
-        .single()
-      timeline = newTimeline
-    }
-    
-    set({ timeline, isLoading: false })
-    
-    // Load events and messages
-    if (timeline) {
-      get().loadEvents()
-      get().loadMessages()
+    try {
+      // Get current user's session
+      const { data: { user } } = await supabase.auth.getUser()
       
-      // Migrate any anonymous data
-      await get().migrateAnonymousData()
+      if (!user) {
+        set({ isLoading: false })
+        return
+      }
+      
+      // Check for existing timeline - check both user_id and created_by
+      const { data: timelines, error: queryError } = await supabase
+        .from('timelines')
+        .select('*')
+        .or(`user_id.eq.${user.id},created_by.eq.${user.id}`)
+        .limit(1)
+      
+      if (queryError) {
+        console.error('Failed to query timelines:', queryError)
+      }
+      
+      let timeline = timelines?.[0]
+      
+      // Create one if none exists
+      if (!timeline) {
+        const { data: newTimeline, error: insertError } = await supabase
+          .from('timelines')
+          .insert({ 
+            name: 'My Life',
+            user_id: user.id,
+            created_by: user.id,
+          })
+          .select()
+          .single()
+        
+        if (insertError) {
+          console.error('Failed to create timeline:', insertError)
+        } else {
+          timeline = newTimeline
+        }
+      }
+      
+      set({ timeline, isLoading: false })
+      
+      // Load events and messages
+      if (timeline) {
+        get().loadEvents()
+        get().loadMessages()
+        
+        // Migrate any anonymous data
+        await get().migrateAnonymousData()
+      }
+    } catch (error) {
+      console.error('Error initializing timeline:', error)
+      set({ isLoading: false })
     }
   },
   
