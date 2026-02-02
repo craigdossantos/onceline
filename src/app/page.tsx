@@ -25,15 +25,32 @@ export default function Home() {
 
   // Initialize timeline - works for both anonymous and authenticated users
   useEffect(() => {
+    // Don't do anything while auth is still loading
+    if (authLoading) {
+      console.log('[page] auth still loading, waiting...')
+      return
+    }
+    
     const init = async () => {
-      if (user) {
-        // Authenticated: use Supabase
-        await initTimeline()
-      } else if (!authLoading) {
-        // Anonymous: use localStorage
-        initAnonymous()
+      console.log('[page] init called, user:', !!user, 'authLoading:', authLoading)
+      try {
+        if (user) {
+          // Authenticated: use Supabase
+          console.log('[page] calling initTimeline for user:', user.id)
+          await initTimeline()
+          console.log('[page] initTimeline completed')
+        } else {
+          // Anonymous: use localStorage
+          console.log('[page] calling initAnonymous')
+          initAnonymous()
+          console.log('[page] initAnonymous completed')
+        }
+      } catch (error) {
+        console.error('[page] init error:', error)
+      } finally {
+        console.log('[page] setting isInitialized=true')
+        setIsInitialized(true)
       }
-      setIsInitialized(true)
     }
     init()
   }, [initTimeline, initAnonymous, user, authLoading])

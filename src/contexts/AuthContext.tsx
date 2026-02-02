@@ -24,67 +24,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Fetch or create default timeline (simplified - no users table needed)
+  // Set up user profile from auth data (no DB calls - store handles timeline)
   const initializeUserData = useCallback(async (authUser: SupabaseUser) => {
-    try {
-      // Skip users table entirely - just work with timelines
-      // Create a simple profile object from auth data
-      setProfile({
-        id: authUser.id,
-        email: authUser.email || '',
-        created_at: authUser.created_at || new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      } as User)
-
-      // Get timeline - check user_id column
-      let { data: userTimeline, error: timelineError } = await supabase
-        .from('timelines')
-        .select('*')
-        .eq('user_id', authUser.id)
-        .limit(1)
-        .maybeSingle()
-
-      if (timelineError) {
-        console.error('Timeline query error:', timelineError)
-      }
-
-      if (!userTimeline) {
-        // Create default timeline
-        const { data: newTimeline, error: createError } = await supabase
-          .from('timelines')
-          .insert({
-            name: 'My Life',
-            user_id: authUser.id,
-          })
-          .select()
-          .single()
-        
-        if (createError) {
-          console.error('Failed to create timeline:', createError)
-        } else {
-          userTimeline = newTimeline
-        }
-      }
-
-      setTimeline(userTimeline)
-    } catch (error) {
-      console.error('Error initializing user data:', error)
-    }
-  }, [supabase])
+    console.log('[AuthContext.initializeUserData] setting profile for user:', authUser.id)
+    // Just create a profile object from auth data - store handles timeline creation
+    setProfile({
+      id: authUser.id,
+      email: authUser.email || '',
+      created_at: authUser.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as User)
+    // Don't set timeline here - let store.initTimeline handle it
+    console.log('[AuthContext.initializeUserData] profile set, timeline will be loaded by store')
+  }, [])
 
   useEffect(() => {
     // Get initial session
     const initAuth = async () => {
-      const { data: { session: initialSession } } = await supabase.auth.getSession()
-      
-      setSession(initialSession)
-      setUser(initialSession?.user ?? null)
-      
-      if (initialSession?.user) {
-        await initializeUserData(initialSession.user)
+      console.log('[AuthContext] initAuth starting')
+      try {
+        const { data: { session: initialSession }, error } = await supabase.auth.getSession()
+        console.log('[AuthContext] getSession result:', { hasSession: !!initialSession, error })
+        
+        setSession(initialSession)
+        setUser(initialSession?.user ?? null)
+        
+        if (initialSession?.user) {
+          console.log('[AuthContext] calling initializeUserData')
+          await initializeUserData(initialSession.user)
+          console.log('[AuthContext] initializeUserData completed')
+        }
+      } catch (error) {
+        console.error('[AuthContext] initAuth error:', error)
+      } finally {
+        console.log('[AuthContext] setting isLoading=false')
+        setIsLoading(false)
       }
-      
-      setIsLoading(false)
     }
 
     initAuth()

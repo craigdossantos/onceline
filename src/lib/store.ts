@@ -91,32 +91,40 @@ export const useStore = create<AppState>()((set, get) => ({
   
   // Timeline actions
   initTimeline: async () => {
+    console.log('[store.initTimeline] starting')
     set({ isLoading: true, isAnonymous: false })
     
     try {
       // Get current user's session
-      const { data: { user } } = await supabase.auth.getUser()
+      console.log('[store.initTimeline] getting user...')
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      console.log('[store.initTimeline] user result:', { hasUser: !!user, userError })
       
       if (!user) {
+        console.log('[store.initTimeline] no user, setting isLoading=false')
         set({ isLoading: false })
         return
       }
       
       // Check for existing timeline for this user
+      console.log('[store.initTimeline] querying timelines...')
       const { data: timelines, error: queryError } = await supabase
         .from('timelines')
         .select('*')
         .eq('user_id', user.id)
         .limit(1)
       
+      console.log('[store.initTimeline] query result:', { timelines, queryError })
+      
       if (queryError) {
-        console.error('Failed to query timelines:', queryError)
+        console.error('[store.initTimeline] Failed to query timelines:', queryError)
       }
       
       let timeline = timelines?.[0]
       
       // Create one if none exists
       if (!timeline) {
+        console.log('[store.initTimeline] creating new timeline...')
         const { data: newTimeline, error: insertError } = await supabase
           .from('timelines')
           .insert({ 
@@ -126,27 +134,34 @@ export const useStore = create<AppState>()((set, get) => ({
           .select()
           .single()
         
+        console.log('[store.initTimeline] create result:', { newTimeline, insertError })
+        
         if (insertError) {
-          console.error('Failed to create timeline:', insertError)
+          console.error('[store.initTimeline] Failed to create timeline:', insertError)
         } else {
           timeline = newTimeline
         }
       }
       
+      console.log('[store.initTimeline] setting timeline and isLoading=false')
       set({ timeline, isLoading: false })
       
       // Load events and messages
       if (timeline) {
+        console.log('[store.initTimeline] loading events and messages...')
         get().loadEvents()
         get().loadMessages()
         
         // Migrate any anonymous data
+        console.log('[store.initTimeline] migrating anonymous data...')
         await get().migrateAnonymousData()
+        console.log('[store.initTimeline] migration done')
       }
     } catch (error) {
-      console.error('Error initializing timeline:', error)
+      console.error('[store.initTimeline] Error:', error)
       set({ isLoading: false })
     }
+    console.log('[store.initTimeline] completed')
   },
   
   updateTimelineName: async (name: string) => {
