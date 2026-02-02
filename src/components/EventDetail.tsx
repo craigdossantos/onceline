@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { format, parseISO } from 'date-fns'
 import { X, Edit2, Trash2, Calendar, Tag, Save, MapPin, Image, Upload, Loader2 } from 'lucide-react'
 import { uploadEventPhoto, resizeImage, extractPhotoMetadata } from '@/lib/photos'
+import { GooglePhotosPicker } from './GooglePhotosPicker'
 
 const CATEGORY_OPTIONS = [
   { value: 'birth', label: 'Birth', icon: '👶' },
@@ -32,6 +33,7 @@ export function EventDetail() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [exifSuggestion, setExifSuggestion] = useState<{ date: string; show: boolean } | null>(null)
+  const [showGooglePhotos, setShowGooglePhotos] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const event = events.find((e) => e.id === selectedEventId)
@@ -82,6 +84,45 @@ export function EventDetail() {
       await updateEvent(event.id, { start_date: exifSuggestion.date })
       setExifSuggestion(null)
     }
+  }
+
+  const handleGooglePhotoSelect = async (photo: { id: string; url: string; fullUrl: string; dateTaken?: string }) => {
+    if (!user) return
+    
+    setIsUploading(true)
+    try {
+      const response = await fetch('/api/photos/google/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          photoId: photo.id,
+          eventId: event.id,
+          userId: user.id,
+        }),
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        // Refresh event data
+        await updateEvent(event.id, {
+          image_url: data.url,
+          image_metadata: data.metadata,
+        })
+        
+        // Suggest date from photo if event has no date
+        if (data.metadata?.dateTaken && !event.start_date) {
+          const photoDate = new Date(data.metadata.dateTaken)
+          setExifSuggestion({
+            date: photoDate.toISOString().split('T')[0],
+            show: true
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Failed to import photo:', error)
+    }
+    setIsUploading(false)
   }
 
   const startEditing = () => {
@@ -257,23 +298,31 @@ export function EventDetail() {
                     )}
                   </div>
                 ) : !isAnonymous && user ? (
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="w-full h-32 rounded-xl border-2 border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent-light)] transition-all flex flex-col items-center justify-center gap-2 text-[var(--color-text-muted)]"
-                  >
+                  <div className="space-y-2">
                     {isUploading ? (
-                      <>
+                      <div className="w-full h-32 rounded-xl border-2 border-dashed border-[var(--color-border)] flex flex-col items-center justify-center gap-2 text-[var(--color-text-muted)]">
                         <Loader2 className="w-6 h-6 animate-spin" />
                         <span className="text-sm">Uploading...</span>
-                      </>
+                      </div>
                     ) : (
-                      <>
-                        <Image className="w-6 h-6" />
-                        <span className="text-sm">Add a photo</span>
-                      </>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="flex-1 h-24 rounded-xl border-2 border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent-light)] transition-all flex flex-col items-center justify-center gap-2 text-[var(--color-text-muted)]"
+                        >
+                          <Upload className="w-5 h-5" />
+                          <span className="text-xs">From device</span>
+                        </button>
+                        <button
+                          onClick={() => setShowGooglePhotos(true)}
+                          className="flex-1 h-24 rounded-xl border-2 border-dashed border-[var(--color-border)] hover:border-blue-500 hover:bg-blue-50 transition-all flex flex-col items-center justify-center gap-2 text-[var(--color-text-muted)]"
+                        >
+                          <Image className="w-5 h-5" />
+                          <span className="text-xs">Google Photos</span>
+                        </button>
+                      </div>
                     )}
-                  </button>
+                  </div>
                 ) : null}
                 
                 <input
@@ -407,6 +456,14 @@ export function EventDetail() {
           )}
         </AnimatePresence>
       </motion.div>
+      
+      {/* Google Photos Picker */}
+      <GooglePhotosPicker
+        isOpen={showGooglePhotos}
+        onClose={() => setShowGooglePhotos(false)}
+        onSelect={handleGooglePhotoSelect}
+        eventDate={event.start_date}
+      />
     </AnimatePresence>
   )
 }
