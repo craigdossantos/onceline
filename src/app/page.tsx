@@ -19,9 +19,16 @@ export default function Home() {
   const { showCelebration, celebrationMessage, clearCelebration } = useCelebration()
   const [isInitialized, setIsInitialized] = useState(false)
   const [showSavePrompt, setShowSavePrompt] = useState(false)
+  const [showDelayedLoader, setShowDelayedLoader] = useState(false)
   
   // Enable keyboard shortcuts for navigation
   useKeyboardShortcuts()
+  
+  // Only show loading spinner after a delay to avoid flash for fast loads
+  useEffect(() => {
+    const timer = setTimeout(() => setShowDelayedLoader(true), 400)
+    return () => clearTimeout(timer)
+  }, [])
 
   // Initialize timeline - works for both anonymous and authenticated users
   useEffect(() => {
@@ -61,12 +68,22 @@ export default function Home() {
       const timer = setTimeout(() => setShowSavePrompt(true), 3000)
       return () => clearTimeout(timer)
     }
+    // Hide save prompt when user signs in
+    if (user && showSavePrompt) {
+      setShowSavePrompt(false)
+    }
   }, [user, events.length, showSavePrompt])
 
   const { selectedEventId } = useStore()
 
-  // Loading state
-  if (authLoading || !isInitialized || storeLoading) {
+  // Loading state logic:
+  // - Show spinner while auth is checking (but only after delay to avoid flash)
+  // - For authenticated users, show spinner while loading their data
+  // - For anonymous users, don't show spinner (localStorage is synchronous)
+  const needsLoading = authLoading || (user && storeLoading)
+  const showLoadingSpinner = showDelayedLoader && needsLoading
+  
+  if (showLoadingSpinner) {
     return (
       <div 
         className="min-h-screen flex items-center justify-center"
