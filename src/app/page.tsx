@@ -9,10 +9,11 @@ import { Celebration } from '@/components/Celebration'
 import { KeyboardHints } from '@/components/KeyboardHints'
 import { EventDetail } from '@/components/EventDetail'
 import { AddEventModal } from '@/components/AddEventModal'
+import { SettingsPanel } from '@/components/SettingsPanel'
 import { useStore } from '@/lib/store'
 import { useCelebration } from '@/hooks/useCelebration'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
-import { Plus } from 'lucide-react'
+import { Plus, Settings } from 'lucide-react'
 
 export default function Home() {
   const { initTimeline, isLoading, hasCompletedOnboarding, setOnboardingComplete, events, selectedEventId } = useStore()
@@ -20,6 +21,7 @@ export default function Home() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   
   // Enable keyboard shortcuts
   useKeyboardShortcuts({
@@ -135,6 +137,15 @@ export default function Home() {
                   <Plus className="w-4 h-4" />
                   <span className="hidden sm:inline">Add Memory</span>
                 </button>
+
+                {/* Settings Button */}
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="w-10 h-10 rounded-full border border-[var(--color-border)] flex items-center justify-center hover:bg-[var(--color-bg-warm)] transition-colors"
+                  title="Settings"
+                >
+                  <Settings className="w-5 h-5 text-[var(--color-text-muted)]" />
+                </button>
               </div>
             </header>
 
@@ -160,6 +171,12 @@ export default function Home() {
             <AddEventModal 
               isOpen={showAddModal} 
               onClose={() => setShowAddModal(false)} 
+            />
+
+            {/* Settings Panel */}
+            <SettingsPanel 
+              isOpen={showSettings} 
+              onClose={() => setShowSettings(false)} 
             />
 
             {/* Keyboard shortcuts hint */}
