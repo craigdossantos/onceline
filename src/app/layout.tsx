@@ -1,26 +1,30 @@
 import type { Metadata } from 'next'
-import { Inter, Playfair_Display } from 'next/font/google'
+import { DM_Sans, Fraunces } from 'next/font/google'
+import { AuthProvider } from '@/contexts/AuthContext'
 import './globals.css'
 
-const inter = Inter({ 
+const dmSans = DM_Sans({ 
   subsets: ['latin'],
-  variable: '--font-inter',
+  variable: '--font-dm-sans',
   display: 'swap',
+  weight: ['300', '400', '500', '600'],
 })
 
-const playfair = Playfair_Display({ 
+const fraunces = Fraunces({ 
   subsets: ['latin'],
-  variable: '--font-playfair',
+  variable: '--font-fraunces',
   display: 'swap',
+  weight: ['300', '400', '500', '600', '700'],
+  style: ['normal', 'italic'],
 })
 
 export const metadata: Metadata = {
-  title: 'Onceline - Every Life is a Story Worth Telling',
-  description: 'Build a beautiful visual timeline of your life through conversation. Document memories, milestones, and the moments that made you who you are.',
-  keywords: ['timeline', 'life story', 'memories', 'biography', 'personal history', 'memoir'],
+  title: 'Onceline — Your Life, Beautifully Told',
+  description: 'Transform your memories into a stunning visual narrative. Onceline helps you capture and celebrate the moments that define your story.',
+  keywords: ['timeline', 'life story', 'memories', 'memoir', 'personal history', 'narrative'],
   openGraph: {
-    title: 'Onceline - Every Life is a Story Worth Telling',
-    description: 'Build a beautiful visual timeline of your life through conversation.',
+    title: 'Onceline — Your Life, Beautifully Told',
+    description: 'Transform your memories into a stunning visual narrative.',
     type: 'website',
   },
 }
@@ -31,8 +35,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
-      <body className="font-sans antialiased">{children}</body>
+    <html lang="en" className={`${dmSans.variable} ${fraunces.variable}`}>
+      <body className="min-h-screen antialiased">
+        <AuthProvider>
+          {children}
+        </AuthProvider>
+      </body>
     </html>
   )
 }

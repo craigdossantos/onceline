@@ -54,18 +54,30 @@ If this is the start of a conversation, warmly greet them and ask about their ea
 
 export async function POST(request: NextRequest) {
   try {
+    // Check for OpenAI API key
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('OPENAI_API_KEY is not set')
+      return NextResponse.json(
+        { error: 'Configuration error', message: 'Chat service is not configured. Please contact support.' },
+        { status: 500 }
+      )
+    }
+    
     // Lazy load OpenAI to avoid build-time errors
     const OpenAI = (await import('openai')).default
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY
     })
     
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-    
     const { timeline_id, messages, events } = await request.json()
+    
+    // Only create Supabase client if we have the service role key (for authenticated users)
+    const supabase = process.env.SUPABASE_SERVICE_ROLE_KEY 
+      ? createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY
+        )
+      : null
     
     // Build context about existing events
     const eventContext = events.length > 0
@@ -89,29 +101,64 @@ export async function POST(request: NextRequest) {
     const responseText = completion.choices[0].message.content || '{}'
     const parsed = JSON.parse(responseText)
     
-    // Insert events if any
+    // For anonymous users (timeline_id="anonymous"), don't insert to DB
+    // The client will handle localStorage storage
+    const isAnonymous = timeline_id === 'anonymous'
+    
+    // Insert events if any (only for authenticated users)
     const insertedEvents = []
     if (parsed.events && parsed.events.length > 0) {
-      for (const event of parsed.events) {
-        const { data } = await supabase
-          .from('events')
-          .insert({
-            timeline_id,
-            title: event.title,
-            description: event.description,
-            start_date: event.start_date,
-            end_date: event.end_date,
-            date_precision: event.date_precision || 'day',
-            age_start: event.age_start,
-            age_end: event.age_end,
-            category: event.category,
-            tags: event.tags || [],
-            source: 'chat'
+      if (isAnonymous) {
+        // For anonymous users, just return the parsed events
+        // Client will add them to localStorage
+        for (const event of parsed.events) {
+          insertedEvents.push({
+            ...event,
+            id: crypto.randomUUID(),
+            timeline_id: 'anonymous',
+            source: 'chat',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           })
-          .select()
-          .single()
-        
-        if (data) insertedEvents.push(data)
+        }
+      } else if (supabase) {
+        // For authenticated users, insert to Supabase
+        for (const event of parsed.events) {
+          const { data, error } = await supabase
+            .from('events')
+            .insert({
+              timeline_id,
+              title: event.title,
+              description: event.description,
+              start_date: event.start_date,
+              end_date: event.end_date,
+              date_precision: event.date_precision || 'day',
+              age_start: event.age_start,
+              age_end: event.age_end,
+              category: event.category,
+              tags: event.tags || [],
+              source: 'chat'
+            })
+            .select()
+            .single()
+          
+          if (error) {
+            console.error('Supabase insert error:', error)
+          }
+          if (data) insertedEvents.push(data)
+        }
+      } else {
+        // No Supabase client but not anonymous - return events without DB insert
+        for (const event of parsed.events) {
+          insertedEvents.push({
+            ...event,
+            id: crypto.randomUUID(),
+            timeline_id,
+            source: 'chat',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+        }
       }
     }
     

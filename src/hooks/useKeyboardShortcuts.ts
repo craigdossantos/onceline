@@ -1,17 +1,11 @@
 import { useEffect, useCallback } from 'react'
 import { useStore } from '@/lib/store'
 
-interface KeyboardShortcutOptions {
-  onAddEvent?: () => void
-}
-
-export function useKeyboardShortcuts(options?: KeyboardShortcutOptions) {
+export function useKeyboardShortcuts() {
   const { 
     events, 
     selectedEventId, 
-    selectEvent, 
-    toggleChat, 
-    isChatOpen 
+    selectEvent,
   } = useStore()
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -23,7 +17,6 @@ export function useKeyboardShortcuts(options?: KeyboardShortcutOptions) {
       return
     }
 
-    // Prevent default for our shortcuts
     const key = e.key.toLowerCase()
     
     switch (key) {
@@ -52,57 +45,27 @@ export function useKeyboardShortcuts(options?: KeyboardShortcutOptions) {
         break
       }
       
-      // Toggle chat with 'c'
-      case 'c': {
-        e.preventDefault()
-        toggleChat()
-        break
-      }
-      
-      // New event with 'n'
-      case 'n': {
-        e.preventDefault()
-        options?.onAddEvent?.()
-        break
-      }
-      
-      // Escape to close chat or deselect event
+      // Escape to deselect event
       case 'escape': {
-        if (isChatOpen) {
-          toggleChat()
-        } else if (selectedEventId) {
+        if (selectedEventId) {
           selectEvent(null)
         }
         break
       }
       
-      // Select first event with 'g' then 'g'
+      // Select first event with 'g'
       case 'g': {
-        if (events.length > 0) {
+        if (!e.shiftKey && events.length > 0) {
           selectEvent(events[0].id)
         }
-        break
-      }
-      
-      // Select last event with 'G' (shift+g)
-      case 'g': {
+        // Select last event with 'G' (shift+g)
         if (e.shiftKey && events.length > 0) {
           selectEvent(events[events.length - 1].id)
         }
         break
       }
-      
-      // Toggle event selection with space or enter
-      case ' ':
-      case 'enter': {
-        if (selectedEventId) {
-          // Could toggle expanded state in future
-          e.preventDefault()
-        }
-        break
-      }
     }
-  }, [events, selectedEventId, selectEvent, toggleChat, isChatOpen])
+  }, [events, selectedEventId, selectEvent])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -112,11 +75,9 @@ export function useKeyboardShortcuts(options?: KeyboardShortcutOptions) {
 
 // Keyboard shortcut reference
 export const SHORTCUTS = [
-  { key: 'n', description: 'New memory' },
-  { key: 'c', description: 'Toggle chat' },
   { key: 'j', description: 'Next event' },
   { key: 'k', description: 'Previous event' },
   { key: 'g', description: 'First event' },
   { key: 'G', description: 'Last event' },
-  { key: 'Esc', description: 'Close / Deselect' },
+  { key: 'Esc', description: 'Deselect event' },
 ]

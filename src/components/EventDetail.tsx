@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@/lib/store'
+import { useAuth } from '@/contexts/AuthContext'
 import { format, parseISO } from 'date-fns'
-import { X, Edit2, Trash2, Calendar, Tag, Save, MapPin } from 'lucide-react'
+import { X, Edit2, Trash2, Calendar, Tag, Save, MapPin, Image, Upload, Loader2 } from 'lucide-react'
+import { uploadEventPhoto, resizeImage, extractPhotoMetadata } from '@/lib/photos'
 
 const CATEGORY_OPTIONS = [
   { value: 'birth', label: 'Birth', icon: '👶' },
@@ -18,7 +20,8 @@ const CATEGORY_OPTIONS = [
 ]
 
 export function EventDetail() {
-  const { events, selectedEventId, selectEvent, updateEvent, deleteEvent } = useStore()
+  const { events, selectedEventId, selectEvent, updateEvent, deleteEvent, isAnonymous } = useStore()
+  const { user } = useAuth()
   const [isEditing, setIsEditing] = useState(false)
   const [editData, setEditData] = useState({
     title: '',
@@ -27,10 +30,59 @@ export function EventDetail() {
     start_date: '',
   })
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [exifSuggestion, setExifSuggestion] = useState<{ date: string; show: boolean } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const event = events.find((e) => e.id === selectedEventId)
 
   if (!event) return null
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+    
+    setIsUploading(true)
+    try {
+      // Resize image before upload
+      const resized = await resizeImage(file)
+      
+      // Upload to Supabase Storage
+      const result = await uploadEventPhoto(resized, user.id, event.id)
+      
+      if (result) {
+        // Update event with photo URL
+        await updateEvent(event.id, {
+          image_url: result.url,
+          image_metadata: result.metadata,
+        })
+        
+        // If photo has date and event doesn't, suggest using it
+        if (result.metadata.dateTaken && !event.start_date) {
+          const photoDate = new Date(result.metadata.dateTaken)
+          setExifSuggestion({
+            date: photoDate.toISOString().split('T')[0],
+            show: true
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Upload failed:', error)
+    }
+    setIsUploading(false)
+    
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const applyExifDate = async () => {
+    if (exifSuggestion) {
+      await updateEvent(event.id, { start_date: exifSuggestion.date })
+      setExifSuggestion(null)
+    }
+  }
 
   const startEditing = () => {
     setEditData({
@@ -185,6 +237,81 @@ export function EventDetail() {
             </div>
           ) : (
             <div className="space-y-6">
+              {/* Photo */}
+              <div className="relative">
+                {event.image_url ? (
+                  <div className="relative rounded-xl overflow-hidden bg-[var(--color-bg-warm)]">
+                    <img 
+                      src={event.image_url} 
+                      alt={event.title}
+                      className="w-full h-48 object-cover"
+                    />
+                    {!isAnonymous && user && (
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="absolute bottom-2 right-2 p-2 rounded-full bg-white/80 hover:bg-white shadow-sm transition-colors"
+                        title="Change photo"
+                      >
+                        <Edit2 className="w-4 h-4 text-[var(--color-text-muted)]" />
+                      </button>
+                    )}
+                  </div>
+                ) : !isAnonymous && user ? (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="w-full h-32 rounded-xl border-2 border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent-light)] transition-all flex flex-col items-center justify-center gap-2 text-[var(--color-text-muted)]"
+                  >
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-6 h-6 animate-spin" />
+                        <span className="text-sm">Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Image className="w-6 h-6" />
+                        <span className="text-sm">Add a photo</span>
+                      </>
+                    )}
+                  </button>
+                ) : null}
+                
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+              </div>
+              
+              {/* EXIF Date Suggestion */}
+              {exifSuggestion?.show && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-3 rounded-xl bg-[var(--color-accent-light)] border border-[var(--color-accent)]"
+                >
+                  <p className="text-sm text-[var(--color-text)] mb-2">
+                    📸 This photo was taken on {format(parseISO(exifSuggestion.date), 'MMMM d, yyyy')}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={applyExifDate}
+                      className="px-3 py-1.5 text-sm bg-[var(--color-accent)] text-white rounded-lg hover:opacity-90"
+                    >
+                      Use this date
+                    </button>
+                    <button
+                      onClick={() => setExifSuggestion(null)}
+                      className="px-3 py-1.5 text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                    >
+                      No thanks
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+              
               {/* Title */}
               <h2 className="text-headline text-2xl text-[var(--color-text)]">{event.title}</h2>
 

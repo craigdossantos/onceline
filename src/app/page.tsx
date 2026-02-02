@@ -1,70 +1,83 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Onboarding } from '@/components/Onboarding'
+import { motion } from 'framer-motion'
+import { ChatBar } from '@/components/ChatBar'
 import { TimelineView } from '@/components/TimelineView'
-import { ChatSheet } from '@/components/ChatSheet'
 import { Celebration } from '@/components/Celebration'
-import { KeyboardHints } from '@/components/KeyboardHints'
 import { EventDetail } from '@/components/EventDetail'
-import { AddEventModal } from '@/components/AddEventModal'
-import { SettingsPanel } from '@/components/SettingsPanel'
+import { KeyboardHints } from '@/components/KeyboardHints'
+import { SavePrompt } from '@/components/SavePrompt'
 import { useStore } from '@/lib/store'
 import { useCelebration } from '@/hooks/useCelebration'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
-import { Plus, Settings } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function Home() {
-  const { initTimeline, isLoading, hasCompletedOnboarding, setOnboardingComplete, events, selectedEventId } = useStore()
+  const { user, isLoading: authLoading } = useAuth()
+  const { initTimeline, initAnonymous, isLoading: storeLoading, events } = useStore()
   const { showCelebration, celebrationMessage, clearCelebration } = useCelebration()
-  const [showOnboarding, setShowOnboarding] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
+  const [showSavePrompt, setShowSavePrompt] = useState(false)
   
-  // Enable keyboard shortcuts
-  useKeyboardShortcuts({
-    onAddEvent: () => setShowAddModal(true),
-  })
+  // Enable keyboard shortcuts for navigation
+  useKeyboardShortcuts()
 
+  // Initialize timeline - works for both anonymous and authenticated users
   useEffect(() => {
     const init = async () => {
-      await initTimeline()
+      if (user) {
+        // Authenticated: use Supabase
+        await initTimeline()
+      } else if (!authLoading) {
+        // Anonymous: use localStorage
+        initAnonymous()
+      }
       setIsInitialized(true)
     }
     init()
-  }, [initTimeline])
+  }, [initTimeline, initAnonymous, user, authLoading])
 
-  // Show onboarding if not completed and no events exist
+  // Show save prompt when anonymous user has events
   useEffect(() => {
-    if (isInitialized && !isLoading) {
-      if (!hasCompletedOnboarding && events.length === 0) {
-        setShowOnboarding(true)
-      }
+    if (!user && events.length >= 2 && !showSavePrompt) {
+      const timer = setTimeout(() => setShowSavePrompt(true), 3000)
+      return () => clearTimeout(timer)
     }
-  }, [isInitialized, isLoading, hasCompletedOnboarding, events.length])
+  }, [user, events.length, showSavePrompt])
 
-  const handleOnboardingComplete = () => {
-    setOnboardingComplete()
-    setShowOnboarding(false)
-  }
+  const { selectedEventId } = useStore()
 
   // Loading state
-  if (!isInitialized || isLoading) {
+  if (authLoading || !isInitialized || storeLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] paper-texture">
+      <div 
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: 'var(--color-paper)' }}
+      >
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
           className="text-center"
         >
           <motion.div
             animate={{ rotate: 360 }}
-            transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
-            className="w-12 h-12 border-2 border-[var(--color-accent)] border-t-transparent rounded-full mx-auto mb-4"
+            transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+            className="w-10 h-10 rounded-full border-2 mx-auto mb-4"
+            style={{ 
+              borderColor: 'var(--color-gold)', 
+              borderTopColor: 'transparent' 
+            }}
           />
-          <p className="text-story text-lg text-[var(--color-text-muted)]">
+          <p 
+            className="text-lg"
+            style={{ 
+              fontFamily: 'var(--font-display)',
+              fontStyle: 'italic',
+              color: 'var(--color-ink-muted)' 
+            }}
+          >
             Preparing your story...
           </p>
         </motion.div>
@@ -73,117 +86,30 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[var(--color-bg)] paper-texture">
-      {/* Onboarding */}
-      <AnimatePresence>
-        {showOnboarding && (
-          <Onboarding onComplete={handleOnboardingComplete} />
-        )}
-      </AnimatePresence>
+    <main className="min-h-screen h-screen flex flex-col" style={{ background: 'var(--color-paper)' }}>
+      {/* Chat Bar at TOP */}
+      <ChatBar />
 
-      {/* Main App */}
-      <AnimatePresence>
-        {!showOnboarding && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            className="h-screen flex flex-col"
-          >
-            {/* Header */}
-            <header className="px-8 py-4 flex items-center justify-between border-b border-[var(--color-border-light)] bg-white/80 backdrop-blur-sm">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-hover)] flex items-center justify-center shadow-sm">
-                  <span className="text-white text-lg">📍</span>
-                </div>
-                <div>
-                  <h1 className="text-lg font-semibold text-[var(--color-text)]">Onceline</h1>
-                  <p className="text-xs text-[var(--color-text-muted)]">Your life, one line at a time</p>
-                </div>
-              </div>
+      {/* Timeline below */}
+      <TimelineView />
 
-              {/* Stats and Add Button */}
-              <div className="flex items-center gap-6">
-                {events.length > 0 && (
-                  <div className="flex items-center gap-6 text-sm">
-                    <div className="text-center">
-                      <div className="text-xl font-semibold text-[var(--color-text)]">{events.length}</div>
-                      <div className="text-[var(--color-text-muted)]">Moments</div>
-                    </div>
-                    {events.length > 0 && events[0].start_date && (
-                      <div className="text-center">
-                        <div className="text-xl font-semibold text-[var(--color-text)]">
-                          {Math.abs(
-                            new Date().getFullYear() - new Date(events[0].start_date).getFullYear()
-                          )}
-                        </div>
-                        <div className="text-[var(--color-text-muted)]">Years</div>
-                      </div>
-                    )}
-                    <div className="text-center">
-                      <div className="text-xl font-semibold text-[var(--color-text)]">
-                        {new Set(events.map((e) => e.category).filter(Boolean)).size}
-                      </div>
-                      <div className="text-[var(--color-text-muted)]">Categories</div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Add Event Button */}
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-[var(--color-accent)] text-white rounded-xl font-medium hover:bg-[var(--color-accent-hover)] transition-colors shadow-sm"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span className="hidden sm:inline">Add Memory</span>
-                </button>
+      {/* Celebration overlay */}
+      <Celebration 
+        show={showCelebration} 
+        message={celebrationMessage}
+        onComplete={clearCelebration}
+      />
 
-                {/* Settings Button */}
-                <button
-                  onClick={() => setShowSettings(true)}
-                  className="w-10 h-10 rounded-full border border-[var(--color-border)] flex items-center justify-center hover:bg-[var(--color-bg-warm)] transition-colors"
-                  title="Settings"
-                >
-                  <Settings className="w-5 h-5 text-[var(--color-text-muted)]" />
-                </button>
-              </div>
-            </header>
+      {/* Event Detail Panel (slide-in) */}
+      {selectedEventId && <EventDetail />}
 
-            {/* Timeline */}
-            <div className="flex-1 overflow-hidden">
-              <TimelineView />
-            </div>
+      {/* Keyboard shortcuts hint */}
+      <KeyboardHints />
 
-            {/* Chat Sheet */}
-            <ChatSheet />
-
-            {/* Celebration */}
-            <Celebration 
-              show={showCelebration} 
-              message={celebrationMessage}
-              onComplete={clearCelebration}
-            />
-
-            {/* Event Detail Panel */}
-            {selectedEventId && <EventDetail />}
-
-            {/* Add Event Modal */}
-            <AddEventModal 
-              isOpen={showAddModal} 
-              onClose={() => setShowAddModal(false)} 
-            />
-
-            {/* Settings Panel */}
-            <SettingsPanel 
-              isOpen={showSettings} 
-              onClose={() => setShowSettings(false)} 
-            />
-
-            {/* Keyboard shortcuts hint */}
-            <KeyboardHints />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Save prompt for anonymous users */}
+      {showSavePrompt && !user && (
+        <SavePrompt onDismiss={() => setShowSavePrompt(false)} />
+      )}
     </main>
   )
 }
