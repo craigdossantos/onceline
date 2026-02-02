@@ -86,7 +86,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen h-screen flex flex-col" style={{ background: 'var(--color-paper)' }}>
+    <main className="min-h-screen h-screen flex flex-col overflow-hidden" style={{ background: 'var(--color-paper)' }}>
       {/* Chat Bar at TOP */}
       <ChatBar />
 

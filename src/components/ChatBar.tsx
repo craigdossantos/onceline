@@ -233,12 +233,12 @@ export function ChatBar() {
               >
                 Not sure where to start? Try one of these:
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-nowrap sm:flex-wrap gap-2 overflow-x-auto hide-scrollbar pb-1 -mx-1 px-1">
                 {CONVERSATION_STARTERS.slice(0, 3).map((starter) => (
                   <button
                     key={starter}
                     onClick={() => handleStarterClick(starter)}
-                    className="px-4 py-2 rounded-full text-sm transition-all hover:scale-[1.02]"
+                    className="px-4 py-2.5 rounded-full text-sm transition-all hover:scale-[1.02] whitespace-nowrap flex-shrink-0"
                     style={{ 
                       background: 'var(--color-paper)',
                       border: '1px solid rgba(26, 25, 24, 0.12)',

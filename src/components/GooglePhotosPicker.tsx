@@ -139,7 +139,7 @@ export function GooglePhotosPicker({ isOpen, onClose, onSelect, eventDate }: Goo
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
+          className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-2xl h-[85vh] sm:max-h-[80vh] overflow-hidden flex flex-col mt-auto sm:mt-0 sm:my-auto"
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
@@ -227,7 +227,7 @@ export function GooglePhotosPicker({ isOpen, onClose, onSelect, eventDate }: Goo
                 ) : (
                   <>
                     {/* Photo grid */}
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-3 gap-1 sm:gap-2">
                       {photos.map(photo => (
                         <button
                           key={photo.id}
