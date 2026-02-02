@@ -24,65 +24,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Fetch or create user profile and default timeline
+  // Fetch or create default timeline (simplified - no users table needed)
   const initializeUserData = useCallback(async (authUser: SupabaseUser) => {
     try {
-      // Get user profile (should be auto-created by DB trigger)
-      // Retry a few times as the trigger may not have completed yet
-      let userProfile = null
-      for (let i = 0; i < 3; i++) {
-        const { data, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', authUser.id)
-          .single()
-        
-        if (data) {
-          userProfile = data
-          break
-        }
-        
-        if (i < 2) {
-          // Wait a bit for DB trigger to complete
-          await new Promise(resolve => setTimeout(resolve, 500))
-        }
-      }
+      // Skip users table entirely - just work with timelines
+      // Create a simple profile object from auth data
+      setProfile({
+        id: authUser.id,
+        email: authUser.email || '',
+        created_at: authUser.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as User)
 
-      // If still no profile, create one manually
-      if (!userProfile) {
-        const { data: newProfile, error } = await supabase
-          .from('users')
-          .insert({
-            id: authUser.id,
-            email: authUser.email!,
-          })
-          .select()
-          .single()
-        
-        if (error) {
-          console.error('Failed to create user profile:', error)
-        } else {
-          userProfile = newProfile
-        }
-      }
-
-      setProfile(userProfile)
-
-      // Get timeline - check both user_id and created_by columns
+      // Get timeline - check user_id column
       let { data: userTimeline, error: timelineError } = await supabase
         .from('timelines')
         .select('*')
-        .or(`user_id.eq.${authUser.id},created_by.eq.${authUser.id}`)
+        .eq('user_id', authUser.id)
         .limit(1)
-        .single()
+        .maybeSingle()
 
-      if (!userTimeline && !timelineError) {
-        // Create default timeline with correct column name
+      if (timelineError) {
+        console.error('Timeline query error:', timelineError)
+      }
+
+      if (!userTimeline) {
+        // Create default timeline
         const { data: newTimeline, error: createError } = await supabase
           .from('timelines')
           .insert({
             name: 'My Life',
-            created_by: authUser.id,
             user_id: authUser.id,
           })
           .select()

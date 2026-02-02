@@ -102,11 +102,11 @@ export const useStore = create<AppState>()((set, get) => ({
         return
       }
       
-      // Check for existing timeline - check both user_id and created_by
+      // Check for existing timeline for this user
       const { data: timelines, error: queryError } = await supabase
         .from('timelines')
         .select('*')
-        .or(`user_id.eq.${user.id},created_by.eq.${user.id}`)
+        .eq('user_id', user.id)
         .limit(1)
       
       if (queryError) {
@@ -122,7 +122,6 @@ export const useStore = create<AppState>()((set, get) => ({
           .insert({ 
             name: 'My Life',
             user_id: user.id,
-            created_by: user.id,
           })
           .select()
           .single()
